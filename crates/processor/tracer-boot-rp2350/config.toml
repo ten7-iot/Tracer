@@ -1,0 +1,2 @@
+crate  = "<name>-boot-rp2350"
+target = "thumbv8m.main-none-eabihf"

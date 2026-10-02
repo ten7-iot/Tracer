@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "xtask",
+    "crates/tracer-lib",
+    "crates/tracer-core",
+    "crates/processor/tracer-boot-rp2350",
+    "crates/gps/tracer-lib-gps-ublox-m10",
+]
+# Plain `cargo build` only builds xtask, never the firmware crates
+default-members = ["xtask"]
+
+[workspace.dependencies]
+tracer-lib  = { path = "crates/tracer-lib" }
+tracer-core = { path = "crates/tracer-core" }
+tracer-lib-gps-ublox-m10 = { path = "crates/gps/tracer-lib-gps-ublox-m10" }

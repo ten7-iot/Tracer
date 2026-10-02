@@ -1,0 +1,13 @@
+[package]
+name = "tracer-boot-rp2350"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tracer-core.workspace = true
+tracer-lib.workspace = true
+tracer-lib-gps-ublox-m10 = { workspace = true, optional = true }
+
+[features]
+default = []
+gps-ublox-m10 = ["dep:tracer-lib-gps-ublox-m10"]

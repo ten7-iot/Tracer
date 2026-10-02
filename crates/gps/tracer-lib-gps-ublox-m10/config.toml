@@ -1,0 +1,2 @@
+feature = "gps-ublox-m10"
+incompatible_with = []

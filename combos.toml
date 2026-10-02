@@ -1,0 +1,13 @@
+categories = ["processor", "gps"]
+
+[[component]]
+id = "rp2350"
+category = "processor"
+enabled = true
+data = "data/processor/tracer-boot-rp2350/config.toml"
+
+[[component]]
+id = "ublox-m10"
+category = "gps"
+enabled = true
+data = "data/gps/tracer-lib-gps-ublox-m10/config.toml"
