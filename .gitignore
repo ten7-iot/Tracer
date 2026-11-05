@@ -16,6 +16,7 @@ target
 # rustc will dump stack traces when hitting an internal compiler error to PWD
 rustc-ice-*.txt
 
+# Ignores the builds so they are not committed to Github
 **/dist*/
 
 # RustRover
