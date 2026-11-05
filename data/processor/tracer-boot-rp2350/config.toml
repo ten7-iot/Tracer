@@ -1,2 +1,3 @@
 crate  = "tracer-boot-rp2350"
 target = "thumbv8m.main-none-eabihf"
+uf2_family = 0xADA52840

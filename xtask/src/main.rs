@@ -1,4 +1,6 @@
 use anyhow::{bail, Context, Result};
+use goblin::elf::{program_header::PT_LOAD, Elf};
+use std::collections::BTreeMap;
 use serde::Deserialize;
 use std::{fs, path::{Path, PathBuf}, process::Command};
 
@@ -16,6 +18,7 @@ struct Data {
     crate_name: Option<String>,
     target: Option<String>,
     feature: Option<String>,
+    uf2_family: Option<u32>,
     #[serde(default)]
     incompatible_with: Vec<String>,
 }
@@ -70,10 +73,14 @@ fn build(combo: &[Comp]) -> Result<()> {
     let out = root().join("dist");
     fs::create_dir_all(&out)?;
     let name = format!("{PREFIX}-{}", ids(combo).join("-"));
-    fs::copy(root().join("target").join(target).join("release").join(krate), out.join(name))?;
+    let elf = root().join("target").join(target).join("release").join(krate);
+    fs::copy(&elf, out.join(&name))?;
+
+    if let Some(family) = cpu.data.uf2_family {
+        elf_to_uf2(&elf, &out.join(format!("{name}.uf2")), family)?;
+    }
     Ok(())
 }
-
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let combos = load_combos()?;
@@ -87,5 +94,35 @@ fn main() -> Result<()> {
         }
         _ => eprintln!("usage: cargo xtask <list | build-all | build <id>...>"),
     }
+    Ok(())
+}
+
+fn elf_to_uf2(elf_path: &Path, uf2_path: &Path, family: u32) -> Result<()> {
+    let bytes = fs::read(elf_path)?;
+    let elf = Elf::parse(&bytes)?;
+
+    // Gather every loadable byte at its flash (load) address, in 256-byte pages
+    let mut pages: BTreeMap<u32, [u8; 256]> = BTreeMap::new();
+    for ph in elf.program_headers.iter().filter(|p| p.p_type == PT_LOAD && p.p_filesz > 0) {
+        let start = ph.p_offset as usize;
+        let data = &bytes[start..start + ph.p_filesz as usize];
+        for (i, b) in data.iter().enumerate() {
+            let addr = ph.p_paddr as u32 + i as u32;
+            pages.entry(addr & !0xFF).or_insert([0xFF; 256])[(addr & 0xFF) as usize] = *b;
+        }
+    }
+
+    let total = pages.len() as u32;
+    let mut out = Vec::with_capacity(pages.len() * 512);
+    for (n, (addr, data)) in pages.iter().enumerate() {
+        // magic0, magic1, flags (family ID present), address, payload size, block no, block count, family
+        for w in [0x0A32_4655u32, 0x9E5D_5157, 0x0000_2000, *addr, 256, n as u32, total, family] {
+            out.extend_from_slice(&w.to_le_bytes());
+        }
+        out.extend_from_slice(data);
+        out.extend_from_slice(&[0u8; 476 - 256]); // pad payload area to 476 bytes
+        out.extend_from_slice(&0x0AB1_6F30u32.to_le_bytes()); // magic end
+    }
+    fs::write(uf2_path, out)?;
     Ok(())
 }

@@ -5,7 +5,7 @@ members = [
     "crates/tracer-lib",
     "crates/tracer-core",
     "crates/processor/tracer-boot-rp2350",
-    "crates/gps/tracer-lib-gps-ublox-m10",
+    "crates/gps/tracer-lib-gps-ublox-m10", "crates/processor/tracer-boot-nrf52840",
 ]
 # Plain `cargo build` only builds xtask, never the firmware crates
 default-members = ["xtask"]

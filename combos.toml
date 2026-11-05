@@ -7,6 +7,12 @@ enabled = true
 data = "data/processor/tracer-boot-rp2350/config.toml"
 
 [[component]]
+id = "nrf52840"
+category = "processor"
+enabled = true
+data = "data/processor/tracer-boot-nrf52840/config.toml"
+
+[[component]]
 id = "ublox-m10"
 category = "gps"
 enabled = true
