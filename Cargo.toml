@@ -1,0 +1,19 @@
+[package]
+name = "tracer-boot-nrf52840"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "tracer-boot-nrf52840"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+tracer-core.workspace = true
+tracer-lib.workspace = true
+tracer-lib-gps-ublox-m10 = { workspace = true, optional = true }
+
+[features]
+default = []
+gps-ublox-m10 = ["dep:tracer-lib-gps-ublox-m10"]
