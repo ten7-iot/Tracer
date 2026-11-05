@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="EMPTY_MODULE" version="4">
+  <component name="NewModuleRootManager">
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/crates/gps/tracer-lib-gps-ublox-m10/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/processor/tracer-boot-nrf52840/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/processor/tracer-boot-rp2350/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/tracer-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/tracer-lib/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/xtask/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
