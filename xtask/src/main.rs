@@ -110,7 +110,15 @@ fn main() -> Result<()> {
     let combos = load_combos()?;
     match args.first().map(String::as_str) {
         Some("list") => combos.iter().for_each(|c| println!("{PREFIX}-{}", ids(c).join("-"))),
-        Some("build-all") => for c in &combos { build(c)?; },
+        Some("build-all") => {
+            // Start from an empty dist/ so no stale images are left behind
+            let dist = root().join("dist");
+            if dist.exists() {
+                fs::remove_dir_all(&dist).with_context(|| format!("clearing {}", dist.display()))?;
+            }
+            for c in &combos { build(c)?; }
+            for cpu in load_category(&load_index()?, "processor")? { build_flight_safe(&cpu)?; }
+        }
         Some("build") => {
             let want = &args[1..];
             let c = combos.iter().find(|c| ids(c) == want).context("no such valid combo")?;
