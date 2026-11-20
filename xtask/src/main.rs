@@ -71,7 +71,7 @@ fn build(combo: &[Comp]) -> Result<()> {
     let target = cpu.data.target.as_deref().context("processor needs `target`")?;
     let features: Vec<&str> = combo.iter().filter_map(|c| c.data.feature.as_deref()).collect();
     let name = format!("{PREFIX}-{}", ids(combo).join("-"));
-    build_bin(krate, krate, target, &features, &name, cpu.data.uf2_family)
+    build_bin(&cpu.id, krate, krate, target, &features, &name, cpu.data.uf2_family)
 }
 
 /// Builds a processor's flight-safe image (radio-silent, no component features).
@@ -81,12 +81,12 @@ fn build_flight_safe(cpu: &Comp) -> Result<()> {
     let target = cpu.data.target.as_deref().context("processor needs `target`")?;
     let bin = format!("{krate}-flight-safe");
     let name = format!("{PREFIX}-{}-flight-safe", cpu.id);
-    build_bin(krate, &bin, target, &[], &name, cpu.data.uf2_family)
+    build_bin(&cpu.id, krate, &bin, target, &[], &name, cpu.data.uf2_family)
 }
 
 /// Builds one firmware binary in release mode and copies the ELF (plus a UF2,
-/// if a family ID is given) into `dist/` under `name`.
-fn build_bin(krate: &str, bin: &str, target: &str, features: &[&str], name: &str,
+/// if a family ID is given) into `dist/<processor>/` under `name`.
+fn build_bin(processor: &str, krate: &str, bin: &str, target: &str, features: &[&str], name: &str,
              uf2_family: Option<u32>) -> Result<()> {
     let status = Command::new("cargo")
         .current_dir(root())
@@ -95,7 +95,7 @@ fn build_bin(krate: &str, bin: &str, target: &str, features: &[&str], name: &str
         .status()?;
     if !status.success() { bail!("build failed for {name}"); }
 
-    let out = root().join("dist");
+    let out = root().join("dist").join(processor);
     fs::create_dir_all(&out)?;
     let elf = root().join("target").join(target).join("release").join(bin);
     fs::copy(&elf, out.join(name))?;
