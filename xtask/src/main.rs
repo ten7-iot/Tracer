@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use goblin::elf::{program_header::PT_LOAD, Elf};
+use goblin::elf::{program_header::PT_LOAD, section_header::{SHF_ALLOC, SHT_NOBITS}, Elf};
 use std::collections::BTreeMap;
 use serde::Deserialize;
 use std::{fs, path::{Path, PathBuf}, process::Command};
@@ -30,20 +30,28 @@ fn root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
 
-fn load_combos() -> Result<Vec<Vec<Comp>>> {
-    let index: Index = toml::from_str(&fs::read_to_string(root().join("combos.toml"))?)?;
-    let mut groups: Vec<Vec<Comp>> = Vec::new();
-    for cat in &index.categories {
-        let mut group = Vec::new();
-        for e in index.component.iter().filter(|e| &e.category == cat && e.enabled) {
-            let path = root().join(&e.data);
-            let data: Data = toml::from_str(&fs::read_to_string(&path)
-                .with_context(|| format!("reading {}", path.display()))?)?;
-            group.push(Comp { id: e.id.clone(), category: cat.clone(), data });
-        }
-        if group.is_empty() { bail!("no enabled components in category '{cat}'"); }
-        groups.push(group);
+fn load_index() -> Result<Index> {
+    Ok(toml::from_str(&fs::read_to_string(root().join("combos.toml"))?)?)
+}
+
+/// Every enabled component in `cat`, with its data file loaded.
+fn load_category(index: &Index, cat: &str) -> Result<Vec<Comp>> {
+    let mut group = Vec::new();
+    for e in index.component.iter().filter(|e| e.category == cat && e.enabled) {
+        let path = root().join(&e.data);
+        let data: Data = toml::from_str(&fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?)?;
+        group.push(Comp { id: e.id.clone(), category: cat.to_string(), data });
     }
+    if group.is_empty() { bail!("no enabled components in category '{cat}'"); }
+    Ok(group)
+}
+
+fn load_combos() -> Result<Vec<Vec<Comp>>> {
+    let index = load_index()?;
+    let groups = index.categories.iter()
+        .map(|cat| load_category(&index, cat))
+        .collect::<Result<Vec<_>>>()?;
     let all = groups.iter().fold(vec![vec![]], |acc: Vec<Vec<Comp>>, g| {
         acc.iter().flat_map(|c| g.iter().map(move |x| {
             let mut n = c.clone(); n.push(x.clone()); n
@@ -62,21 +70,37 @@ fn build(combo: &[Comp]) -> Result<()> {
     let krate = cpu.data.crate_name.as_deref().context("processor needs `crate`")?;
     let target = cpu.data.target.as_deref().context("processor needs `target`")?;
     let features: Vec<&str> = combo.iter().filter_map(|c| c.data.feature.as_deref()).collect();
+    let name = format!("{PREFIX}-{}", ids(combo).join("-"));
+    build_bin(krate, krate, target, &features, &name, cpu.data.uf2_family)
+}
 
+/// Builds a processor's flight-safe image (radio-silent, no component features).
+/// Every processor crate must provide a `<crate>-flight-safe` binary.
+fn build_flight_safe(cpu: &Comp) -> Result<()> {
+    let krate = cpu.data.crate_name.as_deref().context("processor needs `crate`")?;
+    let target = cpu.data.target.as_deref().context("processor needs `target`")?;
+    let bin = format!("{krate}-flight-safe");
+    let name = format!("{PREFIX}-{}-flight-safe", cpu.id);
+    build_bin(krate, &bin, target, &[], &name, cpu.data.uf2_family)
+}
+
+/// Builds one firmware binary in release mode and copies the ELF (plus a UF2,
+/// if a family ID is given) into `dist/` under `name`.
+fn build_bin(krate: &str, bin: &str, target: &str, features: &[&str], name: &str,
+             uf2_family: Option<u32>) -> Result<()> {
     let status = Command::new("cargo")
         .current_dir(root())
-        .args(["build", "--release", "-p", krate, "--target", target,
+        .args(["build", "--release", "-p", krate, "--bin", bin, "--target", target,
                "--no-default-features", "--features", &features.join(",")])
         .status()?;
-    if !status.success() { bail!("build failed for {}", ids(combo).join("-")); }
+    if !status.success() { bail!("build failed for {name}"); }
 
     let out = root().join("dist");
     fs::create_dir_all(&out)?;
-    let name = format!("{PREFIX}-{}", ids(combo).join("-"));
-    let elf = root().join("target").join(target).join("release").join(krate);
-    fs::copy(&elf, out.join(&name))?;
+    let elf = root().join("target").join(target).join("release").join(bin);
+    fs::copy(&elf, out.join(name))?;
 
-    if let Some(family) = cpu.data.uf2_family {
+    if let Some(family) = uf2_family {
         elf_to_uf2(&elf, &out.join(format!("{name}.uf2")), family)?;
     }
     Ok(())
@@ -92,7 +116,17 @@ fn main() -> Result<()> {
             let c = combos.iter().find(|c| ids(c) == want).context("no such valid combo")?;
             build(c)?;
         }
-        _ => eprintln!("usage: cargo xtask <list | build-all | build <id>...>"),
+        Some("flight-safe") => {
+            // `flight-safe` builds every enabled processor; `flight-safe <id>` just that one
+            let cpus = load_category(&load_index()?, "processor")?;
+            let wanted: Vec<&Comp> = match args.get(1) {
+                Some(id) => vec![cpus.iter().find(|c| &c.id == id)
+                    .with_context(|| format!("no enabled processor '{id}'"))?],
+                None => cpus.iter().collect(),
+            };
+            for cpu in wanted { build_flight_safe(cpu)?; }
+        }
+        _ => eprintln!("usage: cargo xtask <list | build-all | build <id>... | flight-safe [processor]>"),
     }
     Ok(())
 }
@@ -101,9 +135,24 @@ fn elf_to_uf2(elf_path: &Path, uf2_path: &Path, family: u32) -> Result<()> {
     let bytes = fs::read(elf_path)?;
     let elf = Elf::parse(&bytes)?;
 
+    // Only segments that carry real section data. The linker can emit a PT_LOAD
+    // holding just the ELF/program headers (e.g. at 0x20000, inside the nRF
+    // SoftDevice); flashing that would overwrite memory the app doesn't own.
+    let has_section_data = |p: &goblin::elf::ProgramHeader| {
+        elf.section_headers.iter().any(|s| {
+            s.sh_flags & u64::from(SHF_ALLOC) != 0
+                && s.sh_type != SHT_NOBITS
+                && s.sh_size > 0
+                && s.sh_offset >= p.p_offset
+                && s.sh_offset < p.p_offset + p.p_filesz
+        })
+    };
+
     // Gather every loadable byte at its flash (load) address, in 256-byte pages
     let mut pages: BTreeMap<u32, [u8; 256]> = BTreeMap::new();
-    for ph in elf.program_headers.iter().filter(|p| p.p_type == PT_LOAD && p.p_filesz > 0) {
+    for ph in elf.program_headers.iter()
+        .filter(|p| p.p_type == PT_LOAD && p.p_filesz > 0 && has_section_data(p))
+    {
         let start = ph.p_offset as usize;
         let data = &bytes[start..start + ph.p_filesz as usize];
         for (i, b) in data.iter().enumerate() {
