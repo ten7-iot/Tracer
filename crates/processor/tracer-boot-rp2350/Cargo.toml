@@ -9,6 +9,13 @@ path = "src/main.rs"
 test = false
 bench = false
 
+# Radio-silent image for flights. See src/bin/flight_safe.rs
+[[bin]]
+name = "tracer-boot-rp2350-flight-safe"
+path = "src/bin/flight_safe.rs"
+test = false
+bench = false
+
 [dependencies]
 tracer-core.workspace = true
 tracer-lib.workspace = true
